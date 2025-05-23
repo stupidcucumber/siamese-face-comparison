@@ -30,7 +30,8 @@ extend-ignore = [
     "D100",
     "D104",
     "ANN101",
-    "ANN102"
+    "ANN102",
+    "D107",
 ]
 per-file-ignores = """
     __init__.py: F401
@@ -44,4 +45,5 @@ checks = [
     "ES01",
     "GL01",
     "GL08",
+    "D107",
 ]
