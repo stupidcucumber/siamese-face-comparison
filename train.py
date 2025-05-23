@@ -8,6 +8,7 @@ from torch.nn import TripletMarginLoss
 from tqdm import tqdm
 
 from src.dataset import SiameeseDataset
+from src.metrics import false_accept, false_rate, true_accept, validation_rate
 from src.nn import SiameeseNN
 
 
@@ -60,11 +61,52 @@ def parse_arguments() -> Namespace:
     return parser.parse_args()
 
 
+def prepare_embeddings_for_validation(
+    anchor_embeddings: torch.Tensor,
+    positive_embeddings: torch.Tensor,
+    negative_embeddings: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Prepare embeddings for validation feeding.
+
+    Parameters
+    ----------
+    anchor_embeddings : torch.Tensor
+        Embeddings corresponding to the anchor inputs.
+    positive_embeddings : torch.Tensor
+        Embeddings corresponding to the positive inputs.
+    negative_embeddings : torch.Tensor
+        Embeddings corresponding to the negative inputs.
+
+    Returns
+    -------
+    tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+        - first part of the pair
+        - scond part of the pair
+        - labels
+    """
+    embeddings_i = [anchor_embeddings, positive_embeddings, negative_embeddings]
+
+    embeddings_j = [positive_embeddings, negative_embeddings, anchor_embeddings]
+
+    labels = [
+        torch.ones(len(anchor_embeddings), dtype=torch.int32),
+        torch.zeros(len(anchor_embeddings), dtype=torch.int32),
+        torch.zeros(len(anchor_embeddings), dtype=torch.int32),
+    ]
+
+    return (
+        torch.concat(embeddings_i, dim=0),
+        torch.concat(embeddings_j, dim=0),
+        torch.concat(labels, dim=0),
+    )
+
+
 def train(
     model: SiameeseNN,
     optimizer: torch.optim.Optimizer,
     epochs: int,
     train_dataloader: torch.utils.data.DataLoader,
+    distance: float,
 ) -> None:
     """Train neural network with TripletMarginLoss.
 
@@ -78,8 +120,10 @@ def train(
         Number of epochs to train for.
     train_dataloader : torch.utils.data.DataLoader
         Dataloader for the train subset.
+    distance : float
+        Minimum distance to consider pair similar.
     """
-    criterion = TripletMarginLoss()
+    criterion = TripletMarginLoss(margin=0.2)
 
     for epoch in range(epochs):
 
@@ -88,6 +132,14 @@ def train(
         train_tqdm = tqdm(train_dataloader, total=len(train_dataloader))
 
         avg_loss = []
+
+        avg_fa = []
+
+        avg_ta = []
+
+        avg_var = []
+
+        avg_far = []
 
         for anchors, positives, negatives in train_tqdm:
 
@@ -107,9 +159,33 @@ def train(
 
             optimizer.step()
 
+            embeddings_i, embeddings_j, labels = prepare_embeddings_for_validation(
+                anchors_embeddings, positive_embeddings, negative_embeddings
+            )
+
+            ta = true_accept(embeddings_i, embeddings_j, labels, distance)
+
+            fa = false_accept(embeddings_i, embeddings_j, labels, distance)
+
+            var = validation_rate(embeddings_i, embeddings_j, labels, distance)
+
+            far = false_rate(embeddings_i, embeddings_j, labels, distance)
+
             avg_loss.append(loss.detach().cpu().item())
 
-            train_tqdm.set_description_str(f"Training: Loss - {mean(avg_loss):0.3f}")
+            avg_ta.append(ta.detach().cpu().item())
+
+            avg_fa.append(fa.detach().cpu().item())
+
+            avg_var.append(var.detach().cpu().item())
+
+            avg_far.append(far.detach().cpu().item())
+
+            train_tqdm.set_description_str(
+                f"Training: Loss - {mean(avg_loss):0.3f} TA - {mean(avg_ta):0.3f} "
+                f"FA - {mean(avg_fa):0.3f} VAR - {mean(avg_var):0.3f} "
+                f"FAR - {mean(avg_far):0.3f}"
+            )
 
 
 def main(
@@ -153,6 +229,7 @@ def main(
         train_dataloader=torch.utils.data.DataLoader(
             dataset=train_dataset, batch_size=batch, shuffle=True
         ),
+        distance=0.2,
     )
 
 
