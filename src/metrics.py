@@ -23,7 +23,7 @@ def calculate_distances(
         Output of shape [B], with the value as a distance
         between each pair.
     """
-    return torch.sqrt(torch.sum(torch.square(embeddings_i - embeddings_j)))
+    return torch.sqrt(torch.sum(torch.square(embeddings_i - embeddings_j), dim=1))
 
 
 def true_accept(
