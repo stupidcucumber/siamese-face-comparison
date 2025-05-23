@@ -107,7 +107,7 @@ class SiameeseNN(Module):
         self.block_3 = DBlock(in_channels=256, out_channels=384, kernel_size=3)
         self.block_4 = DBlock(in_channels=384, out_channels=256, kernel_size=3)
         self.flatten = Flatten()
-        self.head = Head(in_features=65536, out_features=128)
+        self.head = Head(in_features=12544, out_features=128)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Propagate forward the input.
