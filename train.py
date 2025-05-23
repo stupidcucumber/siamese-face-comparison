@@ -107,6 +107,7 @@ def train(
     epochs: int,
     train_dataloader: torch.utils.data.DataLoader,
     distance: float,
+    device: str,
 ) -> None:
     """Train neural network with TripletMarginLoss.
 
@@ -122,6 +123,8 @@ def train(
         Dataloader for the train subset.
     distance : float
         Minimum distance to consider pair similar.
+    device : str
+        Device to optimize on.
     """
     criterion = TripletMarginLoss(margin=0.2)
 
@@ -142,6 +145,10 @@ def train(
         avg_far = []
 
         for anchors, positives, negatives in train_tqdm:
+
+            anchors = anchors.to(device)
+            positives = positives.to(device)
+            negatives = negatives.to(device)
 
             anchors_embeddings = model(anchors)
 
@@ -220,6 +227,8 @@ def main(
 
     model = SiameeseNN()
 
+    model = model.to(device)
+
     optimizer = torch.optim.SGD(params=model.parameters())
 
     train(
@@ -230,6 +239,7 @@ def main(
             dataset=train_dataset, batch_size=batch, shuffle=True
         ),
         distance=0.2,
+        device=device,
     )
 
 
