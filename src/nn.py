@@ -109,7 +109,7 @@ class SiameeseNN(Module):
         self.flatten = Flatten()
         self.head = Head(in_features=12544, out_features=128)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward_once(self, x: torch.Tensor) -> torch.Tensor:
         """Propagate forward the input.
 
         Parameters
@@ -128,3 +128,24 @@ class SiameeseNN(Module):
         x = self.block_4(x)
         x = self.flatten(x)
         return self.head(x)
+
+    def forward(
+        self, x: torch.Tensor, y: torch.Tensor, z: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Propagate forward the input.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Anchor input.
+        y : torch.Tensor
+            Positive input.
+        z : torch.Tensor
+            Negative input.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+            Embeddings of the inputs.
+        """
+        return (self.forward_once(x), self.forward_once(y), self.forward_once(z))

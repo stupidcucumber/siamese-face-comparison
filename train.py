@@ -150,11 +150,9 @@ def train(
             positives = positives.to(device)
             negatives = negatives.to(device)
 
-            anchors_embeddings = model(anchors)
-
-            positive_embeddings = model(positives)
-
-            negative_embeddings = model(negatives)
+            anchors_embeddings, positive_embeddings, negative_embeddings = model(
+                anchors, positives, negatives
+            )
 
             optimizer.zero_grad()
 
