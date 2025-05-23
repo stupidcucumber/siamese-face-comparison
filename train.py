@@ -1,0 +1,169 @@
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
+from statistics import mean
+
+import torch
+import torchvision
+from torch.nn import TripletMarginLoss
+from tqdm import tqdm
+
+from src.dataset import SiameeseDataset
+from src.nn import SiameeseNN
+
+
+def parse_arguments() -> Namespace:
+    """Parse arguments from the CLI.
+
+    Returns
+    -------
+    Namespace
+        Arguments extracted from the CLI.
+    """
+    parser = ArgumentParser()
+
+    parser.add_argument(
+        "--train-data",
+        type=Path,
+        required=True,
+        help="Path to the train partition csv file.",
+    )
+
+    parser.add_argument(
+        "--imgsz",
+        type=int,
+        nargs="+",
+        default=(256, 256),
+        help="Size of the image [height, width]",
+    )
+
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=10,
+        help="Number of epochs to train for. By default: 10.",
+    )
+
+    parser.add_argument(
+        "--batch",
+        type=int,
+        default=32,
+        help="Batch size to use during the traininig. By default: 32.",
+    )
+
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        help="Device to train on. By default: cuda.",
+    )
+
+    return parser.parse_args()
+
+
+def train(
+    model: SiameeseNN,
+    optimizer: torch.optim.Optimizer,
+    epochs: int,
+    train_dataloader: torch.utils.data.DataLoader,
+) -> None:
+    """Train neural network with TripletMarginLoss.
+
+    Parameters
+    ----------
+    model : SiameeseNN
+        Target network to train.
+    optimizer : torch.optim.Optimizer
+        Optimizer to use during traininig.
+    epochs : int
+        Number of epochs to train for.
+    train_dataloader : torch.utils.data.DataLoader
+        Dataloader for the train subset.
+    """
+    criterion = TripletMarginLoss()
+
+    for epoch in range(epochs):
+
+        print(f"Epoch {epoch:03d}")
+
+        train_tqdm = tqdm(train_dataloader, total=len(train_dataloader))
+
+        avg_loss = []
+
+        for anchors, positives, negatives in train_tqdm:
+
+            anchors_embeddings = model(anchors)
+
+            positive_embeddings = model(positives)
+
+            negative_embeddings = model(negatives)
+
+            optimizer.zero_grad()
+
+            loss: torch.Tensor = criterion(
+                anchors_embeddings, positive_embeddings, negative_embeddings
+            )
+
+            loss.backward()
+
+            optimizer.step()
+
+            avg_loss.append(loss.detach().cpu().item())
+
+            train_tqdm.set_description_str(f"Training: Loss - {mean(avg_loss):0.3f}")
+
+
+def main(
+    train_data: Path, imgsz: list[int], epochs: int, batch: int, device: str
+) -> None:
+    """Entry the main point of the script.
+
+    Parameters
+    ----------
+    train_data : Path
+        Path to the csv file with data for training.
+    imgsz : list[int]
+        Size of the inputs.
+    epochs : int
+        Number of epochs to train for.
+    batch : int
+        Batch size to use for training.
+    device : str
+        Device to train on.
+    """
+    transform = torchvision.transforms.Compose(
+        [
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+            ),
+            torchvision.transforms.Resize(size=imgsz),
+        ]
+    )
+
+    train_dataset = SiameeseDataset(data=train_data, transform=transform)
+
+    model = SiameeseNN()
+
+    optimizer = torch.optim.SGD(params=model.parameters())
+
+    train(
+        model=model,
+        optimizer=optimizer,
+        epochs=epochs,
+        train_dataloader=torch.utils.data.DataLoader(
+            dataset=train_dataset, batch_size=batch, shuffle=True
+        ),
+    )
+
+
+if __name__ == "__main__":
+
+    args = parse_arguments()
+
+    try:
+
+        main(**dict(args._get_kwargs()))
+
+    except KeyboardInterrupt:
+
+        print("User interrupted training.")
